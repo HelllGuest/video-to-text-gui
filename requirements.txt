@@ -1,0 +1,19 @@
+# Core dependencies for Video-to-Text GUI Application
+moviepy>=1.0.3
+SpeechRecognition>=3.10.0
+pyaudio>=0.2.11
+
+# GUI framework (included with Python)
+# tkinter - included with Python standard library
+
+# Build and packaging dependencies
+pyinstaller>=5.13.0
+setuptools>=68.0.0
+wheel>=0.41.0
+
+# Optional dependencies for better audio support
+pydub>=0.25.1
+
+# Development dependencies (optional)
+pytest>=7.4.0
+pytest-cov>=4.1.0

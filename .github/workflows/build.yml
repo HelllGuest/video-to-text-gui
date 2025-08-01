@@ -1,0 +1,124 @@
+name: Build Cross-Platform Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.11']
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        
+    - name: Get version info
+      id: version
+      run: |
+        if [[ $GITHUB_REF == refs/tags/* ]]; then
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        else
+          echo "version=dev-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg portaudio19-dev python3-dev
+        
+    - name: Install system dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install ffmpeg portaudio
+        
+    - name: Install system dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        # Windows dependencies are typically handled by pip packages
+        echo "Windows dependencies handled by pip"
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Build binary with PyInstaller
+      run: |
+        pyinstaller --onefile --name video2text-${{ steps.version.outputs.version }} main.py
+        
+    - name: Determine binary extension and rename
+      id: binary-info
+      run: |
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          echo "ext=.exe" >> $GITHUB_OUTPUT
+          echo "binary_name=video2text-${{ steps.version.outputs.version }}.exe" >> $GITHUB_OUTPUT
+        else
+          echo "ext=" >> $GITHUB_OUTPUT
+          echo "binary_name=video2text-${{ steps.version.outputs.version }}" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Verify binary size
+      run: |
+        ls -la dist/
+        du -h dist/video2text-${{ steps.version.outputs.version }}${{ steps.binary-info.outputs.ext }}
+        
+    - name: Upload binary as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: video2text-${{ matrix.os }}-${{ steps.version.outputs.version }}${{ steps.binary-info.outputs.ext }}
+        path: dist/video2text-${{ steps.version.outputs.version }}${{ steps.binary-info.outputs.ext }}
+        retention-days: 30
+        
+    - name: Create Release (on tag)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: "Video2Text ${{ steps.version.outputs.version }}"
+        body: |
+          ## Video2Text ${{ steps.version.outputs.version }}
+          
+          Cross-platform binary release for Video-to-Text GUI application.
+          
+          ### Supported Platforms
+          - Windows (x64)
+          - macOS (x64)
+          - Linux (x64)
+          
+          ### Installation
+          Download the appropriate binary for your platform and run it directly.
+          No additional dependencies required.
+          
+          ### Features
+          - Video file transcription using Google Speech Recognition
+          - Support for multiple video formats (MP4, AVI, MOV, MKV, etc.)
+          - Cross-platform GUI built with tkinter
+          - Real-time progress tracking
+          - Export to TXT and JSON formats
+        files: |
+          dist/video2text-${{ steps.version.outputs.version }}${{ steps.binary-info.outputs.ext }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
