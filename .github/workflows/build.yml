@@ -20,12 +20,13 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
         
     - name: Get version info
       id: version
+      shell: bash
       run: |
         if [[ $GITHUB_REF == refs/tags/* ]]; then
           echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
@@ -51,7 +52,7 @@ jobs:
         echo "Windows dependencies handled by pip"
         
     - name: Cache pip dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
@@ -69,6 +70,7 @@ jobs:
         
     - name: Determine binary extension and rename
       id: binary-info
+      shell: bash
       run: |
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
           echo "ext=.exe" >> $GITHUB_OUTPUT
@@ -79,12 +81,13 @@ jobs:
         fi
         
     - name: Verify binary size
+      shell: bash
       run: |
         ls -la dist/
         du -h dist/video2text-${{ steps.version.outputs.version }}${{ steps.binary-info.outputs.ext }}
         
     - name: Upload binary as artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: video2text-${{ matrix.os }}-${{ steps.version.outputs.version }}${{ steps.binary-info.outputs.ext }}
         path: dist/video2text-${{ steps.version.outputs.version }}${{ steps.binary-info.outputs.ext }}
@@ -92,7 +95,7 @@ jobs:
         
     - name: Create Release (on tag)
       if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.version.outputs.version }}
         name: "Video2Text ${{ steps.version.outputs.version }}"
