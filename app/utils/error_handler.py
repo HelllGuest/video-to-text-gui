@@ -44,7 +44,7 @@ class ErrorHandler:
     and displaying user-friendly messages.
     """
     
-    def __init__(self, settings: Optional[ApplicationSettings] = None):
+    def __init__(self, settings: Optional[ApplicationSettings] = None, show_dialogs: bool = True):
         """
         Initialize the error handler.
         
@@ -54,6 +54,7 @@ class ErrorHandler:
         self.settings = settings
         self._error_counts: Dict[ErrorCategory, int] = {cat: 0 for cat in ErrorCategory}
         self._gui_callback: Optional[Callable[[str, str], None]] = None
+        self._show_dialogs = show_dialogs
         
     def set_gui_callback(self, callback: Callable[[str, str], None]) -> None:
         """
@@ -257,6 +258,9 @@ class ErrorHandler:
             severity: Severity level of the error
             error_details: Detailed error information
         """
+        if not self._show_dialogs:
+            return
+
         if self._gui_callback:
             # Use custom GUI callback if available
             title = f"{severity.value}: {error_details['category']}"
@@ -349,7 +353,7 @@ def get_error_handler() -> Optional[ErrorHandler]:
     return _global_error_handler
 
 
-def initialize_error_handler(settings: Optional[ApplicationSettings] = None) -> ErrorHandler:
+def initialize_error_handler(settings: Optional[ApplicationSettings] = None, show_dialogs: bool = True) -> ErrorHandler:
     """
     Initialize the global error handler.
     
@@ -360,5 +364,5 @@ def initialize_error_handler(settings: Optional[ApplicationSettings] = None) -> 
         The initialized ErrorHandler instance
     """
     global _global_error_handler
-    _global_error_handler = ErrorHandler(settings)
+    _global_error_handler = ErrorHandler(settings, show_dialogs)
     return _global_error_handler

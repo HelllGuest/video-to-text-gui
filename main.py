@@ -48,10 +48,15 @@ sys.path.insert(0, str(project_root))
 
 def main():
     """Main entry point for the application."""
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--headless", action="store_true", help="Run in headless mode")
+    args = parser.parse_args()
+
     try:
         from app import VideoToTextApp
         
-        app = VideoToTextApp()
+        app = VideoToTextApp(headless=args.headless)
         app.run()
     except KeyboardInterrupt:
         sys.exit(0)

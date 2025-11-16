@@ -65,6 +65,16 @@ class TranscriptionRequest:
     verbose: bool
     timestamp: datetime
 
+    def to_dict(self):
+        """Converts the dataclass to a dictionary."""
+        return {
+            "video_path": self.video_path,
+            "output_path": self.output_path,
+            "output_format": self.output_format,
+            "verbose": self.verbose,
+            "timestamp": self.timestamp.isoformat()
+        }
+
 
 @dataclass
 class TranscriptionResult:
@@ -113,9 +123,15 @@ class ApplicationSettings:
         last_video_directory: Last directory used for video file selection
         last_output_directory: Last directory used for output file selection
         window_geometry: Window size and position settings
+        memory_threshold_mb: Memory threshold in MB for triggering garbage collection
+        progress_update_interval: Interval in seconds for progress updates
+        chunk_size_mb: Chunk size in MB for processing large files
     """
     default_output_format: str
     verbose_mode: bool
     last_video_directory: str
     last_output_directory: str
     window_geometry: str
+    memory_threshold_mb: int = 500
+    progress_update_interval: float = 0.1
+    chunk_size_mb: int = 50

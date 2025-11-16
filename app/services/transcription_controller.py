@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Callable, Optional, Dict, Any
 
 from ..core.interfaces import ITranscriptionController, ITranscriptionService, IFileManager
-from ..core.models import TranscriptionRequest, TranscriptionResult, ProgressUpdate
+from ..core.models import TranscriptionRequest, TranscriptionResult, ProgressUpdate, ApplicationSettings
 from ..utils.error_handler import get_error_handler, ErrorCategory
 from ..utils.validation import validate_transcription_request
 from ..utils.performance_monitor import get_performance_monitor, PerformanceOptimizer
@@ -32,6 +32,7 @@ class TranscriptionController(ITranscriptionController):
         self,
         transcription_service: ITranscriptionService,
         file_manager: IFileManager,
+        settings: Optional[ApplicationSettings] = None,
         progress_callback: Optional[Callable[[ProgressUpdate], None]] = None,
         completion_callback: Optional[Callable[[TranscriptionResult], None]] = None
     ):
@@ -94,9 +95,10 @@ class TranscriptionController(ITranscriptionController):
             try:
                 self._validate_transcription_request(request)
             except ValueError as e:
-                self.error_handler.handle_validation_error(
-                    "transcription request",
-                    str(e),
+                self.error_handler.handle_error(
+                    e,
+                    category=ErrorCategory.VALIDATION,
+                    context={"request": request.to_dict()},
                     show_dialog=True
                 )
                 raise
