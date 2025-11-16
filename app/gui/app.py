@@ -68,8 +68,9 @@ class VideoToTextApp:
     and wires together all components with proper dependency injection.
     """
     
-    def __init__(self):
+    def __init__(self, headless=False):
         """Initialize the application."""
+        self.headless = headless
         # Core services
         self.settings_manager: Optional[SettingsManager] = None
         self.file_manager: Optional[FileManager] = None
@@ -100,26 +101,29 @@ class VideoToTextApp:
             # Initialize core services
             self._initialize_services()
             
-            # Create main window
-            self.main_window = MainWindow(self.settings_manager)
-            
-            # Initialize GUI panels
-            self._initialize_gui_panels()
-            
-            # Wire up component communication
-            self._setup_component_communication()
-            
-            # Set up event handlers
-            self._setup_event_handlers()
+            if not self.headless:
+                # Create main window
+                self.main_window = MainWindow(self.settings_manager)
+
+                # Initialize GUI panels
+                self._initialize_gui_panels()
+
+                # Wire up component communication
+                self._setup_component_communication()
+
+                # Set up event handlers
+                self._setup_event_handlers()
             
             self._is_initialized = True
             
-            # Perform initial validation to set correct button state
-            self._update_transcription_availability()
+            if not self.headless:
+                # Perform initial validation to set correct button state
+                self._update_transcription_availability()
             
         except Exception as e:
-            # Error initializing application - create minimal window
-            self.main_window = MainWindow()
+            if not self.headless:
+                # Error initializing application - create minimal window
+                self.main_window = MainWindow()
             
     def _register_cleanup_handlers(self) -> None:
         """Register cleanup handlers for graceful shutdown."""
@@ -339,16 +343,19 @@ class VideoToTextApp:
         if not self.settings_manager:
             self.settings_manager = SettingsManager()
         
+        settings = self.settings_manager.load_settings()
+
         # Initialize file manager
         self.file_manager = FileManager()
         
         # Initialize transcription service
-        self.transcription_service = TranscriptionService()
+        self.transcription_service = TranscriptionService(settings=settings)
         
         # Initialize transcription controller with callbacks
         self.transcription_controller = TranscriptionController(
             transcription_service=self.transcription_service,
             file_manager=self.file_manager,
+            settings=settings,
             progress_callback=self._on_transcription_progress,
             completion_callback=self._on_transcription_complete
         )
@@ -669,13 +676,18 @@ class VideoToTextApp:
             if not self.startup():
                 sys.exit(1)
             
-            if self.main_window:
+            if not self.headless and self.main_window:
                 # Center the window on first run
                 self.main_window.center_window()
                 
                 # Start the GUI main loop
                 self.main_window.run()
-        
+            elif self.headless:
+                print("Running in headless mode.")
+                # In headless mode, we could potentially run a transcription from the command line
+                # For now, we just exit
+                sys.exit(0)
+
         except KeyboardInterrupt:
             self.shutdown()
         except Exception as e:

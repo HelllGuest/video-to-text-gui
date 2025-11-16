@@ -45,10 +45,11 @@ Video2Text is designed to simplify the process of extracting text from video con
 ### Output Options
 - **Plain Text (.txt)**: Simple, readable transcript format
 - **Structured JSON**: Rich format with metadata including:
-  - Word count and processing time
+  - Word count, character count, and processing time
   - Audio duration and quality metrics
   - Processing statistics and performance data
   - Error logs and warnings
+  - Format version for compatibility
 
 ### Performance Features
 - **Background Processing**: Non-blocking UI with cancellation support

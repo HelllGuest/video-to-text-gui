@@ -18,7 +18,7 @@ import moviepy as mp
 import speech_recognition as sr
 
 from ..core.interfaces import ITranscriptionService
-from ..core.models import TranscriptionResult, ProgressUpdate
+from ..core.models import TranscriptionResult, ProgressUpdate, ApplicationSettings
 from ..utils.error_handler import get_error_handler, ErrorCategory
 
 
@@ -30,17 +30,24 @@ class TranscriptionService(ITranscriptionService):
     script, adding progress callbacks, thread safety, and cancellation support.
     """
     
-    def __init__(self):
+    def __init__(self, settings: Optional[ApplicationSettings] = None):
         """Initialize the transcription service."""
         self._cancel_event = threading.Event()
         self._current_thread: Optional[threading.Thread] = None
         self._temp_audio_file = None  # Will be created dynamically
         
         # Performance optimization settings
-        self._memory_threshold_mb = 500
-        self._progress_update_interval = 0.1
+        self.settings = settings if settings else ApplicationSettings(
+            default_output_format="txt",
+            verbose_mode=False,
+            last_video_directory="",
+            last_output_directory="",
+            window_geometry=""
+        )
+        self._memory_threshold_mb = self.settings.memory_threshold_mb
+        self._progress_update_interval = self.settings.progress_update_interval
+        self._chunk_size_mb = self.settings.chunk_size_mb
         self._last_progress_update = 0
-        self._chunk_size_mb = 50
         
         # Set up logging and error handling
         logging.basicConfig(
@@ -309,53 +316,6 @@ class TranscriptionService(ITranscriptionService):
             self._logger.error(f"File not found: {file_path}")
             return False
         return True
-    
-    def _transcribe_audio_file(self) -> str:
-        """
-        Transcribe the temporary audio file using speech recognition.
-        
-        Returns:
-            Transcribed text
-            
-        Raises:
-            Exception: If speech recognition fails
-        """
-        recognizer = sr.Recognizer()
-        
-        try:
-            if not self._temp_audio_file or not os.path.exists(self._temp_audio_file):
-                raise Exception("Temporary audio file not found")
-                
-            with sr.AudioFile(self._temp_audio_file) as source:
-                # Check for cancellation before processing
-                if self._cancel_event.is_set():
-                    raise Exception("Transcription was cancelled")
-                
-                # Read the entire audio file instead of just listening for a phrase
-                audio_data = recognizer.record(source)
-                
-                # Check for cancellation before recognition
-                if self._cancel_event.is_set():
-                    raise Exception("Transcription was cancelled")
-                
-                text = recognizer.recognize_google(audio_data)
-                self._logger.info("Speech recognition completed successfully")
-                return text
-                
-        except sr.UnknownValueError as e:
-            error_msg = "Google Speech Recognition could not understand the audio"
-            self._logger.error(error_msg)
-            self.error_handler.handle_speech_recognition_error(
-                Exception(error_msg),
-                show_dialog=False
-            )
-            raise Exception(error_msg)
-            
-        except sr.RequestError as e:
-            error_msg = f"Could not request results from Google Speech Recognition service: {e}"
-            self._logger.error(error_msg)
-            self.error_handler.handle_speech_recognition_error(e, show_dialog=False)
-            raise Exception(error_msg)
     
     def _cleanup_temp_files(self) -> None:
         """Clean up temporary files created during processing."""

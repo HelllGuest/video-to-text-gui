@@ -2,6 +2,7 @@
 moviepy>=1.0.3
 SpeechRecognition>=3.10.0
 pyaudio>=0.2.11
+psutil
 
 # GUI framework (included with Python)
 # tkinter - included with Python standard library
