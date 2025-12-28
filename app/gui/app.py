@@ -60,6 +60,7 @@ from ..services.transcription_service import TranscriptionService
 from ..utils.settings_manager import SettingsManager
 from ..utils.file_manager import FileManager
 from ..core.models import TranscriptionRequest, TranscriptionResult, ProgressUpdate
+from ..utils.error_handler import initialize_error_handler
 
 
 class VideoToTextApp:
@@ -68,9 +69,14 @@ class VideoToTextApp:
     and wires together all components with proper dependency injection.
     """
     
-    def __init__(self, headless=False):
+    def __init__(self, headless=False, input_file=None, output_file=None, output_format="txt", verbose=False):
         """Initialize the application."""
         self.headless = headless
+        self.input_file = input_file
+        self.output_file = output_file
+        self.output_format = output_format
+        self.verbose = verbose
+
         # Core services
         self.settings_manager: Optional[SettingsManager] = None
         self.file_manager: Optional[FileManager] = None
@@ -98,6 +104,15 @@ class VideoToTextApp:
     def initialize(self) -> None:
         """Initialize application components with proper dependency injection."""
         try:
+            # Initialize settings manager (only if not already set)
+            if not self.settings_manager:
+                self.settings_manager = SettingsManager()
+
+            settings = self.settings_manager.load_settings()
+
+            # Initialize error handler immediately
+            initialize_error_handler(settings=settings, show_dialogs=not self.headless)
+
             # Initialize core services
             self._initialize_services()
             
@@ -123,7 +138,12 @@ class VideoToTextApp:
         except Exception as e:
             if not self.headless:
                 # Error initializing application - create minimal window
+                # Note: error handler might already be initialized so we can log this
+                print(f"Error initializing: {e}")
                 self.main_window = MainWindow()
+            else:
+                print(f"Error initializing in headless mode: {e}")
+                sys.exit(1)
             
     def _register_cleanup_handlers(self) -> None:
         """Register cleanup handlers for graceful shutdown."""
@@ -207,27 +227,28 @@ class VideoToTextApp:
         Returns:
             True if startup state is valid, False otherwise
         """
-        # Check that essential components are initialized
-        if not self.main_window:
-            return False
-        
         if not self.settings_manager:
             return False
         
         if not self.file_manager:
             return False
-        
-        # Check that GUI panels are properly initialized
-        required_panels = [
-            self.file_selection_panel,
-            self.configuration_panel,
-            self.progress_panel,
-            self.results_panel
-        ]
-        
-        for panel in required_panels:
-            if panel is None:
+
+        if not self.headless:
+            # Check that essential components are initialized
+            if not self.main_window:
                 return False
+
+            # Check that GUI panels are properly initialized
+            required_panels = [
+                self.file_selection_panel,
+                self.configuration_panel,
+                self.progress_panel,
+                self.results_panel
+            ]
+
+            for panel in required_panels:
+                if panel is None:
+                    return False
         
         return True
     
@@ -246,7 +267,8 @@ class VideoToTextApp:
             self._cancel_running_operations()
             
             # Save current state
-            self._save_shutdown_settings()
+            if not self.headless:
+                self._save_shutdown_settings()
             
             # Cleanup resources
             self._cleanup_before_exit()
@@ -339,9 +361,7 @@ class VideoToTextApp:
     
     def _initialize_services(self) -> None:
         """Initialize core service components."""
-        # Initialize settings manager (only if not already set)
-        if not self.settings_manager:
-            self.settings_manager = SettingsManager()
+        # Note: settings_manager and error_handler are already initialized in initialize()
         
         settings = self.settings_manager.load_settings()
 
@@ -352,12 +372,13 @@ class VideoToTextApp:
         self.transcription_service = TranscriptionService(settings=settings)
         
         # Initialize transcription controller with callbacks
+        # For headless, we'll set callbacks later or differently
         self.transcription_controller = TranscriptionController(
             transcription_service=self.transcription_service,
             file_manager=self.file_manager,
             settings=settings,
-            progress_callback=self._on_transcription_progress,
-            completion_callback=self._on_transcription_complete
+            progress_callback=self._on_transcription_progress if not self.headless else None,
+            completion_callback=self._on_transcription_complete if not self.headless else None
         )
     
     def _initialize_gui_panels(self) -> None:
@@ -683,15 +704,80 @@ class VideoToTextApp:
                 # Start the GUI main loop
                 self.main_window.run()
             elif self.headless:
-                print("Running in headless mode.")
-                # In headless mode, we could potentially run a transcription from the command line
-                # For now, we just exit
-                sys.exit(0)
+                self._run_headless()
 
         except KeyboardInterrupt:
             self.shutdown()
         except Exception as e:
             self.shutdown()
+            sys.exit(1)
+
+    def _run_headless(self) -> None:
+        """Run the application in headless mode."""
+        if not self.input_file:
+            print("Error: Input file is required in headless mode.")
+            sys.exit(1)
+
+        if not os.path.exists(self.input_file):
+            print(f"Error: Input file not found: {self.input_file}")
+            sys.exit(1)
+
+        # Determine output file if not provided
+        output_path = self.output_file
+        if not output_path:
+            base_name = os.path.splitext(self.input_file)[0]
+            output_path = f"{base_name}_transcript.{self.output_format}"
+
+        print(f"Starting transcription for: {self.input_file}")
+        print(f"Output will be saved to: {output_path}")
+        print("Format:", self.output_format)
+
+        # Create request
+        request = TranscriptionRequest(
+            video_path=self.input_file,
+            output_path=output_path,
+            output_format=self.output_format,
+            verbose=self.verbose,
+            timestamp=datetime.now()
+        )
+
+        # Setup callbacks for console output
+        completion_event = threading.Event()
+        result_holder = {}
+
+        def progress_callback(update: ProgressUpdate):
+            print(f"[{update.percentage:.1f}%] {update.current_step}: {update.message}")
+
+        def completion_callback(result: TranscriptionResult):
+            result_holder['result'] = result
+            completion_event.set()
+
+        # Wire up callbacks
+        self.transcription_controller.set_progress_callback(progress_callback)
+        self.transcription_controller.set_completion_callback(completion_callback)
+
+        # Start transcription
+        try:
+            self.transcription_controller.start_transcription(request)
+
+            # Wait for completion
+            while not completion_event.wait(timeout=1.0):
+                # Check for keyboard interrupt logic here if needed,
+                # but main thread is blocked here so KeyboardInterrupt handles it.
+                pass
+
+            result = result_holder.get('result')
+            if result and result.success:
+                print("\nTranscription completed successfully!")
+                print(f"Transcript saved to: {result.output_file_path}")
+                sys.exit(0)
+            else:
+                error = result.error_message if result else "Unknown error"
+                print(f"\nTranscription failed: {error}")
+                sys.exit(1)
+
+        except Exception as e:
+            print(f"Error starting transcription: {e}")
             sys.exit(1)
     
     def get_transcription_controller(self) -> Optional[TranscriptionController]:

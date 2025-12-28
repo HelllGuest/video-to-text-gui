@@ -49,20 +49,37 @@ sys.path.insert(0, str(project_root))
 def main():
     """Main entry point for the application."""
     import argparse
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Video-to-Text Transcription Tool")
     parser.add_argument("--headless", action="store_true", help="Run in headless mode")
+    parser.add_argument("--video", type=str, help="Path to input video file (required for headless)")
+    parser.add_argument("--output", type=str, help="Path to output transcript file")
+    parser.add_argument("--format", type=str, default="txt", choices=["txt", "json"], help="Output format (default: txt)")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
+
     args = parser.parse_args()
+
+    # Validate headless arguments
+    if args.headless and not args.video:
+        parser.error("--video is required when using --headless")
 
     try:
         from app import VideoToTextApp
         
-        app = VideoToTextApp(headless=args.headless)
+        app = VideoToTextApp(
+            headless=args.headless,
+            input_file=args.video,
+            output_file=args.output,
+            output_format=args.format,
+            verbose=args.verbose
+        )
         app.run()
     except KeyboardInterrupt:
         sys.exit(0)
     except ImportError as e:
+        print(f"Error importing dependencies: {e}")
         sys.exit(1)
     except Exception as e:
+        print(f"An unexpected error occurred: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
