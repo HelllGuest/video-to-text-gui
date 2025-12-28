@@ -45,14 +45,10 @@ class MainWindow:
         self.on_start_transcription = None
         
         # Initialize error handling
-        settings = None
-        if self.settings_manager:
-            settings = self.settings_manager.load_settings()
-        
-        self.error_handler = initialize_error_handler(settings=settings)
-        self.error_handler.set_gui_callback(self._show_error_dialog)
-        
-
+        # Error handler should already be initialized by the app controller
+        self.error_handler = get_error_handler()
+        if self.error_handler:
+            self.error_handler.set_gui_callback(self._show_error_dialog)
         
         # Initialize window
         self._setup_window()
